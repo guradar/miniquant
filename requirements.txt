@@ -2,3 +2,4 @@ flask
 yfinance
 matplotlib
 mplfinance
+six
