@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <title>Stock Watchlist</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --card: #ffffff; --line: #e1e5ea; --text: #1f2933;
+      --muted: #6b7280; --accent: #2563eb; --danger: #dc2626; --ok: #16a34a;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 20px; font-size: .9rem; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+    .card h2 { font-size: 1.05rem; margin: 0 0 12px; }
+    .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+    .field { display: flex; flex-direction: column; }
+    .field label { font-size: .75rem; color: var(--muted); margin-bottom: 4px; }
+    input[type=text], input[type=number], select, textarea {
+      font: inherit; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: var(--text);
+    }
+    textarea { resize: vertical; min-height: 38px; }
+    button { font: inherit; cursor: pointer; border: none; border-radius: 6px; padding: 8px 14px; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-small { padding: 4px 10px; font-size: .8rem; }
+    .btn-danger { background: #fee2e2; color: var(--danger); }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-ghost { background: #e5e7eb; color: var(--text); }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: #f9fafb; }
+    tbody tr:hover { background: #f8fafc; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+    .badge-up, .badge-buy { background: #dcfce7; color: #166534; }
+    .badge-down, .badge-sell { background: #fee2e2; color: #991b1b; }
+    .badge-flat, .badge-hold { background: #fef9c3; color: #854d0e; }
+    .badge-unknown { background: #e5e7eb; color: #4b5563; }
+    .muted { color: var(--muted); }
+    .flash { padding: 10px 14px; border-radius: 8px; margin-bottom: 10px; font-size: .9rem; }
+    .flash-ok { background: #dcfce7; color: #166534; }
+    .flash-error { background: #fee2e2; color: #991b1b; }
+    .update-form { background: #f8fafc; border: 1px dashed var(--line); border-radius: 8px; padding: 12px; margin: 4px 0 8px; }
+    .update-form .form-row { gap: 10px; }
+    .empty { text-align: center; color: var(--muted); padding: 28px 0; }
+    .actions { white-space: nowrap; }
+    .notes-cell { max-width: 220px; min-width: 140px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Stock Watchlist</h1>
+    <p class="sub">Market data (price, MA5, MA20) is refreshed after market close.(3:50pm)
+        <a href="http://chart.radar.de5.net:30278" target="_blank">-Chart</a>
+    </p>
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <div class="card">
+      <h2>Add Stock</h2>
+      <form method="post" action="{{ url_for('add') }}">
+        <div class="form-row">
+          <div class="field">
+            <label for="code">Code</label>
+            <input type="text" name="code" id="code" placeholder="e.g. AAPL" required>
+          </div>
+          <div class="field">
+            <label for="name">Name</label>
+            <input type="text" name="name" id="name" placeholder="e.g. Apple Inc." required>
+          </div>
+          <div class="field">
+            <label for="buy_price">Buy Price</label>
+            <input type="number" name="buy_price" id="buy_price" step="0.001" min="0" placeholder="0.000" required>
+          </div>
+          <div class="field">
+            <label for="position">Position</label>
+            <input type="number" name="position" id="position" step="1" min="0" value="0">
+          </div>
+          <div class="field">
+            <label for="add_notes">Notes</label>
+            <input type="text" name="notes" id="add_notes" placeholder="optional">
+          </div>
+          <button type="submit" class="btn-primary">Add</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Watchlist ({{ stocks|length }})</h2>
+      {% if stocks %}
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th class="num">Price</th>
+            <th class="num">Buy Price</th>
+            <th class="num">Position</th>
+            <th class="num">MA5</th>
+            <th class="num">MA20</th>
+            <th>Renko</th>
+            <th>Trend</th>
+            <th>Signal</th>
+            <th>Notes</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in stocks %}
+          {% set rk = s.renko or "" %}
+          {% set rklast = rk[-1:] %}
+          <tr>
+            <td><strong>{{ s.code }}</strong></td>
+            <td>{{ s.name }}</td>
+            <td class="num">{{ fmt_price(s.price, s.code) }}</td>
+            <td class="num">{{ fmt_price(s.buy_price, s.code) }}</td>
+            <td class="num">{{ s.position }}</td>
+            <td class="num">{{ fmt_price(s.ma5, s.code) }}</td>
+            <td class="num">{{ fmt_price(s.ma20, s.code) }}</td>
+            <td><span class="badge badge-{% if rklast == "U" %}up{% elif rklast == "D" %}down{% else %}unknown{% endif %}">{{ rk or "—" }}</span></td>
+            <td><span class="badge badge-{{ s.trend|lower }}">{{ s.trend }}</span></td>
+            <td><span class="badge badge-{{ s.signal|lower }}">{{ s.signal }}</span></td>
+            <td class="notes-cell">{{ s.notes or "" }}</td>
+            <td class="actions">
+              <button type="button" class="btn-ghost btn-small" onclick="toggleRow(this, '{{ s.code }}')">Edit</button>
+              <form method="post" action="{{ url_for('delete', code=s.code) }}" style="display:inline"
+                    onsubmit="return confirm('Delete {{ s.code }}?')">
+                <button type="submit" class="btn-danger btn-small">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% if s.notes or true %}
+          <tr class="row-edit" id="edit-{{ s.code }}" hidden>
+            <td colspan="12">
+              <div class="update-form">
+                <form method="post" action="{{ url_for('update', code=s.code) }}">
+                  <div class="form-row">
+                    <div class="field">
+                      <label>Name</label>
+                      <input type="text" name="name" value="{{ s.name }}" required>
+                    </div>
+                    <div class="field">
+                      <label>Trend</label>
+                      <select name="trend">
+                        {% for opt in ["Unknown", "Up", "Down", "Flat"] %}
+                        <option value="{{ opt }}" {% if s.trend == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label>Signal</label>
+                      <select name="signal">
+                        {% for opt in ["Unknown", "Buy", "Sell", "Hold"] %}
+                        <option value="{{ opt }}" {% if s.signal == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                    <div class="field" style="flex:1; min-width: 180px;">
+                      <label>Notes</label>
+                      <input type="text" name="notes" value="{{ s.notes }}">
+                    </div>
+                    <button type="submit" class="btn-primary btn-small">Save</button>
+                  </div>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No stocks yet. Add your first stock above.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    function toggleRow(btn, code) {
+      const row = document.getElementById("edit-" + code);
+      row.hidden = !row.hidden;
+    }
+  </script>
+</body>
+</html>
